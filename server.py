@@ -268,5 +268,11 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__=='__main__':
     init_db()
+    server = ThreadingHTTPServer((HOST,PORT),Handler)
     print('禾护本地演示服务：http://%s:%s（开发短信模式）'%(HOST,PORT),flush=True)
-    ThreadingHTTPServer((HOST,PORT),Handler).serve_forever()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()

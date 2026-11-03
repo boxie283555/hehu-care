@@ -18,7 +18,29 @@ python3 launcher.py
 python3 server.py
 ```
 
-本应用默认仅监听 `127.0.0.1`，不向其他设备开放。端口可通过 `PORT` 环境变量修改，数据库路径可通过 `CARE_DB` 修改。启动器固定使用 8765。
+本应用默认仅监听 `127.0.0.1`，不向其他设备开放。端口可通过 `PORT` 环境变量修改，数据库路径可通过 `CARE_DB` 修改。启动器也支持 `HOST` / `PORT` 环境变量，或 `--host` / `--port` 参数。
+
+## Windows 启动（推荐）
+
+安装 Python 3.9+ 后，**双击 `start-windows.cmd`**。脚本从项目目录启动服务，启动失败时保留报错窗口。服务运行期间不要关闭此窗口，在浏览器打开 http://127.0.0.1:8765 。该入口不依赖 VS Code 调试器。
+
+如 Python 不在 PATH，可在 PowerShell 中指定解释器：
+
+```powershell
+$env:PYTHON_EXE = "C:\Program Files\Python311\python.exe"
+.\start-windows.cmd
+```
+
+需要后台运行时使用 `py -3 launcher.py`。启动器在 Windows 禁用 debugpy 子进程自动注入，并尝试脱离调试作业；受 Windows 作业策略限制时会提示改用 CMD 入口。推荐从独立 PowerShell 启动，而不是依赖调试会话。
+
+局域网访问：
+
+```powershell
+$env:HOST = "0.0.0.0"
+.\start-windows.cmd
+```
+
+其他设备访问 `http://Windows电脑实际IP:8765`；必要时放行 Windows 防火墙的对应端口。默认仍只允许本机访问。后台启动日志为 `data/server.log`；CMD 入口的日志直接显示在窗口中。
 
 ## 演示账号
 
