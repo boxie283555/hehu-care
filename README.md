@@ -4,7 +4,7 @@
 
 ## 本机启动
 
-需要 Python 3.9 或以上，无需安装后端依赖。
+Windows 可双击 `start-windows.cmd`，自动检测并安装 Python；无需提前手动安装。macOS / Linux 命令行运行需要 Python 3.9 或以上。应用无需安装后端依赖。
 
 ```sh
 python3 launcher.py
@@ -22,7 +22,9 @@ python3 server.py
 
 ## Windows 启动（推荐）
 
-安装 Python 3.9+ 后，**双击 `start-windows.cmd`**。脚本从项目目录启动服务，启动失败时保留报错窗口。服务运行期间不要关闭此窗口，在浏览器打开 http://127.0.0.1:8765 。该入口不依赖 VS Code 调试器。
+**双击 `start-windows.cmd`，无需预先安装 Python。** 启动脚本先寻找已有的 Python 3.9+（包括Python启动器、PATH和注册表）；找不到时从 Python 官网选择最新稳定的3.13补丁版本，校验有效的 Python Software Foundation 数字签名后，静默安装到当前用户的 `%LOCALAPPDATA%\Hehu\Python313`。默认不需要管理员权限，不修改系统PATH，不安装pip或额外服务；后续启动复用现有环境，不重复下载。首次自动安装需要联网，并受Windows安装策略约束。
+
+脚本从项目目录启动服务，启动失败时保留报错窗口。服务运行期间不要关闭此窗口，在浏览器打开 http://127.0.0.1:8765 。该入口不依赖 VS Code 调试器。
 
 如 Python 不在 PATH，可在 PowerShell 中指定解释器：
 
@@ -149,3 +151,13 @@ npm run test:browser
 ```
 
 应用运行本身不依赖 Node.js。扫码测试独立解码下载的PNG，验证二维码内容、打印版式、真实局域网地址访问、新家长建档、草稿恢复、多患儿选择与问卷提交。
+
+### Windows 自动安装说明
+
+- `start-windows.cmd` 和 `start-lan-windows.cmd` 均会自动准备Python。
+- 已有Python版本不满足3.9+时，会另装本系统的用户级运行环境，不卸载原有Python。
+- 显式配置了无效的 `PYTHON_EXE` 时会提示纠正，不会悄悄覆盖管理员的选择。
+- 下载或签名校验失败时停止执行，窗口保留错误，修复网络后重新双击即可。
+- `PUBLIC_BASE_URL`、`HOST` 和 `PORT` 环境变量会传递给服务；自动安装Python不等于配置公网域名、HTTPS或短信。
+- 自动安装仅针对Windows入口；macOS/Linux尚未包含系统级安装器。
+- 如需只准备环境、不启动服务：`powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap-windows.ps1 -InstallOnly`。
