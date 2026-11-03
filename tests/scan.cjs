@@ -1,9 +1,10 @@
+const {PYTHON,createSchema,dropSchema,stopServer}=require('./runtime.cjs');
 const {chromium}=require('playwright');
 const jsQR=require('jsqr');const {PNG}=require('pngjs');
 const {spawn}=require('node:child_process');const fs=require('node:fs');const os=require('node:os');const path=require('node:path');const assert=require('node:assert/strict');
 (async()=>{
 const root=path.resolve(__dirname,'..'),tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hehu-scan-')),base='http://127.0.0.1:8767';
-const server=spawn('python3',[path.join(root,'server.py')],{env:{...process.env,PORT:'8767',HOST:'0.0.0.0',CARE_DB:path.join(tmp,'care.db')},stdio:'ignore'});
+const schema=createSchema();const server=spawn(PYTHON,[path.join(root,'server.py')],{env:{...process.env,PORT:'8767',HOST:'0.0.0.0',HEHU_DB_SCHEMA:schema,SEED_DEMO:'1'},stdio:'ignore'});
 let browser;
 try{
  for(let i=0;i<60;i++){try{await fetch(base+'/api/config');break;}catch{await new Promise(r=>setTimeout(r,100));}}
@@ -32,5 +33,5 @@ try{
  const detail=await (await q.request.get(lan+'/api/children/'+child.id)).json();assert.equal(detail.questionnaires.length,1);assert.equal(detail.questionnaires[0].kind,'过敏症状随访');
  await q.goto(lan+'/?questionnaire=invalid');await q.locator('.workspace').waitFor();assert.equal(await q.locator('#questionnaire-form').count(),0);
  assert.deepEqual(errors,[]);console.log('PASS: QR independent decode, PNG download, print layout, actual LAN access, new guardian + new child, scan draft reload, multi-child selection, targeted submission and access control.');
-}finally{if(browser)await browser.close();server.kill();fs.rmSync(tmp,{recursive:true,force:true});}
+}finally{if(browser)await browser.close();await stopServer(server);dropSchema(schema);fs.rmSync(tmp,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exit(1)});

@@ -1,3 +1,4 @@
+const {PYTHON,createSchema,dropSchema,stopServer}=require('./runtime.cjs');
 // Run native page controllers against the real API using a minimal wx adapter.
 // This checks data/navigation contracts, not WeChat's native rendering engine.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),assert=require('node:assert/strict'),{spawn}=require('node:child_process');
@@ -6,7 +7,7 @@ global.getCurrentPages=()=>[{route:currentRoute}];
 global.wx={getStorageSync:k=>store.get(k)||'',setStorageSync:(k,v)=>store.set(k,v),removeStorageSync:k=>store.delete(k),showToast:x=>events.push(x),redirectTo:x=>{navigation=x.url;},navigateTo:x=>{navigation=x.url;},reLaunch:x=>{navigation=x.url;},
  request:o=>{fetch(o.url,{method:o.method,headers:o.header,...(o.method==='POST'?{body:JSON.stringify(o.data)}:{})}).then(async r=>o.success({statusCode:r.status,data:await r.json()})).catch(o.fail);}};
 function loadPage(name){const file=path.join(root,'miniprogram/pages',name,'index.js');delete require.cache[require.resolve(file)];let definition;global.Page=d=>definition=d;require(file);const page={...definition,data:structuredClone(definition.data),setData(values){for(const [key,val]of Object.entries(values)){const parts=key.split('.');let target=this.data;for(const p of parts.slice(0,-1)){if(!target[p])target[p]={};target=target[p];}target[parts.at(-1)]=val;}}};currentRoute='pages/'+name+'/index';return page;}
-(async()=>{const temp=fs.mkdtempSync(path.join(os.tmpdir(),'hehu-mini-'));const base='http://127.0.0.1:8768';const server=spawn('python3',[path.join(root,'server.py')],{env:{...process.env,PORT:'8768',HOST:'127.0.0.1',CARE_DB:path.join(temp,'care.db')},stdio:'ignore'});let entry;
+(async()=>{const temp=fs.mkdtempSync(path.join(os.tmpdir(),'hehu-mini-'));const base='http://127.0.0.1:8768';const schema=createSchema();const server=spawn(PYTHON,[path.join(root,'server.py')],{env:{...process.env,PORT:'8768',HOST:'127.0.0.1',HEHU_DB_SCHEMA:schema,SEED_DEMO:'1'},stdio:'ignore'});let entry;
 try{
  for(let i=0;i<60;i++){try{await fetch(base+'/api/config');break;}catch{await new Promise(r=>setTimeout(r,100));}}
  require('../miniprogram/config').apiBase=base;
@@ -24,5 +25,5 @@ try{
  const app=JSON.parse(fs.readFileSync(path.join(root,'miniprogram/app.json')));
  for(const page of app.pages)for(const ext of ['js','json','wxml'])assert.ok(fs.existsSync(path.join(root,'miniprogram',page+'.'+ext)));
  console.log('PASS: native mini-program controllers + real API: scan intent, phone verification, bearer session, child creation, draft restore, submission, growth, messages, ownership and logout.');
-}finally{if(entry)entry.onUnload();server.kill();fs.rmSync(temp,{recursive:true,force:true});}
+}finally{if(entry)entry.onUnload();await stopServer(server);dropSchema(schema);fs.rmSync(temp,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exit(1);});

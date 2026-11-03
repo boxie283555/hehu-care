@@ -10,9 +10,11 @@ import time
 import urllib.request
 import webbrowser
 from network_config import sharing_config
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / 'data'
+load_dotenv(ROOT / '.env', override=False)
 
 
 def ready(url):
@@ -88,10 +90,12 @@ def main():
         else:
             child.terminate()
             raise RuntimeError('启动超时，请查看 %s。' % (DATA / 'server.log'))
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(url + '/api/config', timeout=2) as response:
+        active = json.load(response)
+    if active.get('database') != 'postgresql':
+        raise RuntimeError('检测到旧版服务，请先停止旧服务再启动PostgreSQL版本。')
     if args.host == '0.0.0.0':
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open(url + '/api/config', timeout=2) as response:
-            active = json.load(response)
         if active.get('bind_host') != '0.0.0.0':
             raise RuntimeError('已有服务仅监听本机。请先停止旧服务，再以 --lan 或 start-lan-windows.cmd 启动。')
     print('禾护已运行：' + url)

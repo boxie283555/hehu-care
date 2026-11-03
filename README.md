@@ -2,12 +2,45 @@
 
 可在本机运行的首版业务原型。以电子问卷为入口，连接监护人、医护评估、管理计划与动态随访。
 
-## 本机启动
+## PostgreSQL 配置（首次启动必需）
 
-Windows 可双击 `start-windows.cmd`，自动检测并安装 Python；无需提前手动安装。macOS / Linux 命令行运行需要 Python 3.9 或以上。应用无需安装后端依赖。
+本版仅使用 PostgreSQL，不会回退SQLite。可使用本机、Docker或云数据库，推荐PostgreSQL 17。
+
+1. 创建数据库和数据库账号（账号需有目标schema建表权限）。
+2. 复制 `.env.example` 为 `.env`，填写连接地址：
+
+```dotenv
+DATABASE_URL=postgresql://hehu:你的密码@127.0.0.1:5432/hehu
+DB_POOL_MAX=10
+SEED_DEMO=1
+```
+
+密码中的特殊字符需要URL编码。演示时设置 `SEED_DEMO=1`，仅在空库首次启动时创建演示账号；正式数据设置为0。空库的医护账号可运行 `python tools/create_clinician.py --username admin --name 管理员`，按提示设置密码（需先安装requirements）。数据库默认不暴露公网，远程云库根据供应商要求加上 `?sslmode=require` 或校验服务器证书。
+
+可选Docker方式：在 `.env` 中另设 `POSTGRES_PASSWORD`（与连接地址密码一致），执行 `docker compose up -d postgres`。容器数据保存在命名卷，端口只绑定127.0.0.1。不要执行 `docker compose down -v`，否则会删除数据库卷。
+
+启动脚本自动安装Python和驱动，但**不自动安装Windows PostgreSQL服务**；连接已有或云端数据库即可。
+
+## 原SQLite数据迁移
+
+先停止旧服务，保留原来的 `data` 目录。配置一个空的PostgreSQL数据库，设置 `SEED_DEMO=0`，避免提前写入演示数据。安装依赖后运行：
 
 ```sh
-python3 launcher.py
+python -m pip install -r requirements.txt
+python tools/migrate_sqlite.py --source data/care.sqlite3
+python tools/migrate_sqlite.py --source data/care.sqlite3 --apply
+```
+
+第一条迁移命令只检查源数据；加 `--apply` 才导入。工具先创建一致性SQLite备份（包含WAL中的数据），再在单一PostgreSQL事务中导入业务表，保留ID与关联关系，核对行数并重置自增序列。目标库已有业务数据时拒绝导入。原SQLite文件不删除、不改写。
+
+旧会话、验证码与限流记录不迁移，需要重新登录。验证迁移完成后启动新服务。不要在旧SQLite服务仍接受写入时迁移，以免漏掉之后的修改。
+
+## 本机启动
+
+Windows 可双击 `start-windows.cmd`，自动检测并安装 Python；无需提前手动安装。macOS / Linux 命令行运行需要 Python 3.9 或以上。启动脚本会自动在项目虚拟环境中安装PostgreSQL驱动。启动前需要准备PostgreSQL数据库并配置 `.env`，详见下文。
+
+```sh
+python3 bootstrap.py
 ```
 
 也可双击 `启动禾护.command`。访问 http://127.0.0.1:8765 。启动器会复用已经运行的本应用服务；后台日志在 `data/server.log`。
@@ -15,14 +48,14 @@ python3 launcher.py
 前台运行（按 Ctrl+C 停止）：
 
 ```sh
-python3 server.py
+python3 bootstrap.py --foreground
 ```
 
-本应用默认仅监听 `127.0.0.1`，不向其他设备开放。端口可通过 `PORT` 环境变量修改，数据库路径可通过 `CARE_DB` 修改。启动器也支持 `HOST` / `PORT` 环境变量，或 `--host` / `--port` 参数。
+本应用默认仅监听 `127.0.0.1`，不向其他设备开放。端口可通过 `PORT` 环境变量修改，数据库通过 `DATABASE_URL` 配置，旧 `CARE_DB` 参数不再生效。启动器也支持 `HOST` / `PORT` 环境变量，或 `--host` / `--port` 参数。
 
 ## Windows 启动（推荐）
 
-**双击 `start-windows.cmd`，无需预先安装 Python。** 启动脚本先寻找已有的 Python 3.9+（包括Python启动器、PATH和注册表）；找不到时从 Python 官网选择最新稳定的3.13补丁版本，校验有效的 Python Software Foundation 数字签名后，静默安装到当前用户的 `%LOCALAPPDATA%\Hehu\Python313`。默认不需要管理员权限，不修改系统PATH，不安装pip或额外服务；后续启动复用现有环境，不重复下载。首次自动安装需要联网，并受Windows安装策略约束。
+**双击 `start-windows.cmd`，无需预先安装 Python。** 启动脚本先寻找已有的 Python 3.9+（包括Python启动器、PATH和注册表）；找不到时从 Python 官网选择最新稳定的3.13补丁版本，校验有效的 Python Software Foundation 数字签名后，静默安装到当前用户的 `%LOCALAPPDATA%\Hehu\Python313`。默认不需要管理员权限，不修改系统PATH，不安装全局pip或数据库服务；项目虚拟环境使用pip安装依赖；后续启动复用现有环境，不重复下载。首次自动安装需要联网，并受Windows安装策略约束。
 
 脚本从项目目录启动服务，启动失败时保留报错窗口。服务运行期间不要关闭此窗口，在浏览器打开 http://127.0.0.1:8765 。该入口不依赖 VS Code 调试器。
 
@@ -33,7 +66,7 @@ $env:PYTHON_EXE = "C:\Program Files\Python311\python.exe"
 .\start-windows.cmd
 ```
 
-需要后台运行时使用 `py -3 launcher.py`。启动器在 Windows 禁用 debugpy 子进程自动注入，并尝试脱离调试作业；受 Windows 作业策略限制时会提示改用 CMD 入口。推荐从独立 PowerShell 启动，而不是依赖调试会话。
+需要后台运行时使用 `py -3 bootstrap.py`。启动器在 Windows 禁用 debugpy 子进程自动注入，并尝试脱离调试作业；受 Windows 作业策略限制时会提示改用 CMD 入口。推荐从独立 PowerShell 启动，而不是依赖调试会话。
 
 局域网访问：
 
@@ -61,7 +94,7 @@ $env:HOST = "0.0.0.0"
 
 - Windows：双击 **`start-lan-windows.cmd`**，保持窗口打开。
 - macOS：双击 **`启动禾护-局域网.command`**。
-- 命令行：`python launcher.py --lan`（macOS通常为 `python3`）。
+- 命令行：`python bootstrap.py --lan`（macOS通常为 `python3`）。
 
 系统会检测候选局域网IP，医院端可修改地址。先在手机浏览器验证地址能打开，再生成二维码；手机与电脑需处于可互访的同一局域网。多网卡/VPN、访客Wi-Fi隔离及Windows防火墙均可能影响连接。Windows必要时允许对应端口入站。局域网IP变化后，需要重新生成并替换二维码。
 
@@ -94,7 +127,7 @@ $env:HOST = "0.0.0.0"
 - 家长报告“有所加重”进入待复核事项；医护记录处理结果、处理人和关闭状态。
 - 家长留言、医护回复。异步留言，每次打开或刷新页面获取最新数据；未实现实时推送。
 - 医护导出不含姓名/手机号的生长记录 CSV，查看最近150条访问与操作审计。
-- 适配桌面和手机宽度；数据保存在 SQLite，重启保留。
+- 适配桌面和手机宽度；数据保存在 PostgreSQL，重启保留。
 
 ## 推荐体验流程
 
@@ -108,12 +141,12 @@ $env:HOST = "0.0.0.0"
 ## 数据与架构
 
 - 前端：原生 JavaScript / CSS，静态资源本地提供，无外部CDN依赖。
-- 后端：Python 标准库 HTTP 服务；SQLite 参数化查询与事务。
+- 后端：Python 标准库 HTTP 服务；PostgreSQL、psycopg 3、连接池及参数化查询与事务。
 - 安全基础：HttpOnly、SameSite=Strict 会话 Cookie，服务端角色/归属控制，同源JSON写请求，密码PBKDF2哈希，验证码哈希存储，审计日志。
 - 业务实体：用户、会话、监护归属、患儿、测量、问卷、评估、计划、随访任务、关注事项、留言、审计。
 - 本版以快速本地运行和验证流程为目标，采用轻量实现；正式建设时可迁移至方案中的 Vue / Spring Boot / PostgreSQL。
 
-`data/care.sqlite3` 为本地业务数据库，已加入 Git 忽略。**数据库文件本身尚未加密，请仅使用演示信息。** 不要在运行中单独复制主数据库文件充当完整备份（WAL模式可能存在未合并数据）；应停机后备份整个data目录，或使用SQLite备份API。
+数据库连接保存在被Git忽略的 `.env` 中。旧 `data/care.sqlite3` 仅作为迁移源保留，不再用于服务读写。PostgreSQL应使用 `pg_dump` / 云数据库备份，密码不要提交Git。
 
 ## 尚待医院确认与后续实现
 
@@ -122,20 +155,20 @@ $env:HOST = "0.0.0.0"
 - 真实短信、定时外发提醒、发送失败重试与自动升级；当前仅有应用内任务/逾期提示。
 - HIS、患者主索引、实名与监护关系核验、多名监护人共享授权。
 - 科室/医生分管权限、正式账号管理、附件上传、临床评估签署及生产级数据加密。
-- 受控生产部署、HTTPS、备份恢复、监管合规评审。当前标准库服务器仅用于本机原型。
+- 受控生产部署、HTTPS、备份恢复、监管合规评审。当前HTTP服务器仍用于原型；更换数据库不代表已完成生产部署。
 
 急性严重症状应及时就医，不能等待线上问卷或留言处理。系统不自动建议停药或重新引入回避食物。
 
 ## 验证
 
 ```sh
-python3 -m unittest discover -s tests -v
+data/venv/bin/python -m unittest discover -s tests -v
 node --check web/app.js
 ```
 
-API测试使用临时数据库，覆盖跨家长隔离、医护权限、验证码防重放/限流、数据校验、问卷草稿与提交、计划、随访完成、复核、留言和导出审计。
+API测试使用隔离的PostgreSQL schema，覆盖跨家长隔离、医护权限、验证码防重放/限流、数据校验、问卷草稿与提交、计划、随访完成、复核、留言和导出审计。
 
-浏览器测试使用 Playwright 和本机 Chrome，启动独立8766端口和临时数据库：
+浏览器测试使用 Playwright 和本机 Chrome，启动独立8766端口和隔离的PostgreSQL schema：
 
 ```sh
 node tests/browser.cjs

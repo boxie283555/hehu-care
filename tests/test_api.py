@@ -1,6 +1,7 @@
 import unittest, subprocess, tempfile, os, sys, time, json, urllib.request, urllib.error, http.cookiejar, socket
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
+from tools.test_database import create, drop
 class Client:
     def __init__(self,base): self.base=base;self.opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     def request(self,path,data=None,origin=None,authorization=None):
@@ -17,13 +18,14 @@ class Client:
 class WorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.schema=create()
         cls.temp=tempfile.TemporaryDirectory();s=socket.socket();s.bind(('127.0.0.1',0));port=s.getsockname()[1];s.close();cls.base='http://127.0.0.1:'+str(port)
-        cls.proc=subprocess.Popen([sys.executable,str(ROOT/'server.py')],env={**os.environ,'PORT':str(port),'CARE_DB':cls.temp.name+'/test.db'},stdout=subprocess.DEVNULL)
+        cls.proc=subprocess.Popen([sys.executable,str(ROOT/'server.py')],env={**os.environ,'PORT':str(port),'HEHU_DB_SCHEMA':cls.schema,'SEED_DEMO':'1','HOST':'127.0.0.1','DB_POOL_MAX':'2'},stdout=subprocess.DEVNULL)
         for _ in range(80):
             try:urllib.request.urlopen(cls.base+'/api/config');break
             except Exception:time.sleep(.05)
     @classmethod
-    def tearDownClass(cls):cls.proc.terminate();cls.proc.wait();cls.temp.cleanup()
+    def tearDownClass(cls):cls.proc.terminate();cls.proc.wait();drop(cls.schema);cls.temp.cleanup()
     def test_complete_care_workflow_and_access_control(self):
         parent=Client(self.base);doctor=Client(self.base);other=Client(self.base)
         self.assertEqual(parent.request('/children')[0],401)
@@ -95,5 +97,25 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(separate.request('/auth/logout',{},authorization=auth)[0],200)
         self.assertEqual(separate.request('/me',authorization=auth)[0],401)
         self.assertEqual(separate.request('/me',authorization='Bearer invalid')[0],401)
+
+    def test_concurrent_login_and_writes(self):
+        from concurrent.futures import ThreadPoolExecutor
+        phone='13200132000'
+        code=Client(self.base).request('/auth/code',{'phone':phone})[1]['dev_code']
+        def login(_):return Client(self.base).request('/auth/login',{'phone':phone,'code':code,'client':'miniprogram'})
+        with ThreadPoolExecutor(max_workers=2) as workers:results=list(workers.map(login,range(2)))
+        self.assertEqual(sorted(r[0] for r in results),[200,400])
+        auth='Bearer '+next(r[1]['access_token'] for r in results if r[0]==200)
+        client=Client(self.base)
+        child=client.request('/children',{'name':'并发测试','sex':'男','birth':'2025-01-01','feeding':'普通膳食','allergies':'无','history':'无','consent':True},authorization=auth)[1]['id']
+        def message(i):return Client(self.base).request('/children/'+str(child)+'/messages',{'body':'并发留言'+str(i)},authorization=auth)[0]
+        with ThreadPoolExecutor(max_workers=6) as workers:statuses=list(workers.map(message,range(24)))
+        self.assertEqual(statuses,[201]*24)
+        detail=client.request('/children/'+str(child),authorization=auth)[1]
+        self.assertEqual(len(detail['messages']),24)
+        def measurement(_):return Client(self.base).request('/children/'+str(child)+'/measurements',{'day':'2026-01-01','height':80,'weight':10},authorization=auth)[0]
+        with ThreadPoolExecutor(max_workers=4) as workers:statuses=list(workers.map(measurement,range(4)))
+        self.assertEqual(statuses.count(201),1)
+        self.assertTrue(all(s in (201,400,409) for s in statuses))
 
 if __name__=='__main__':unittest.main(verbosity=2)

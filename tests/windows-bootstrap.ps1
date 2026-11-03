@@ -13,6 +13,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Bootstrap failed' }
 & (Join-Path $project 'bootstrap-windows.ps1') -InstallOnly -ForceManagedInstall -RuntimeDirectory $runtime
 if ($LASTEXITCODE -ne 0) { throw 'Runtime reuse failed' }
 Set-Location $project
+& (Join-Path $runtime 'python.exe') -m ensurepip
+& (Join-Path $runtime 'python.exe') -m pip install -r requirements.txt
+if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
 & (Join-Path $runtime 'python.exe') -m unittest discover -s tests -v
 if ($LASTEXITCODE -ne 0) { throw 'Application tests failed' }
 Write-Host "Windows checks passed. Test runtime retained at: $runtime"

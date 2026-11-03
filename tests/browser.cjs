@@ -1,3 +1,4 @@
+const {PYTHON,createSchema,dropSchema,stopServer}=require('./runtime.cjs');
 const playwrightPath=process.env.PLAYWRIGHT_PATH;
 let chromium;
 try { ({chromium}=require(playwrightPath||'playwright')); }
@@ -6,7 +7,7 @@ const {spawn}=require('node:child_process');
 const fs=require('node:fs');const os=require('node:os');const path=require('node:path');const assert=require('node:assert/strict');
 (async()=>{
 const root=path.resolve(__dirname,'..'),tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hehu-ui-'));
-const server=spawn('python3',[path.join(root,'server.py')],{env:{...process.env,PORT:'8766',CARE_DB:path.join(tmp,'care.db')},stdio:'ignore'});
+const schema=createSchema();const server=spawn(PYTHON,[path.join(root,'server.py')],{env:{...process.env,PORT:'8766',HEHU_DB_SCHEMA:schema,SEED_DEMO:'1'},stdio:'ignore'});
 let browser;try{
 for(let i=0;i<50;i++){try{await fetch('http://127.0.0.1:8766/api/config');break;}catch{await new Promise(r=>setTimeout(r,100));}}
 browser=await chromium.launch({channel:'chrome',headless:true});
@@ -28,5 +29,5 @@ await p.reload();await p.locator('[data-nav=tasks]').first().click();await p.get
 await p.locator('[data-nav=plans]').first().click();await p.getByText('持续记录并完成随访',{exact:true}).waitFor();
 await p.setViewportSize({width:390,height:844});await p.locator('[data-nav=overview]').first().click();await p.screenshot({path:path.join(root,'output/禾护_手机端.png'),fullPage:true});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile page should not overflow');
 assert.deepEqual(errors,[]);console.log('PASS: browser workflow, draft restore, measurement, clinical assessment, plan, risk handling, message reply, follow-up completion, mobile layout; no JS errors.');
-}finally{if(browser)await browser.close();server.kill();fs.rmSync(tmp,{recursive:true,force:true});}
+}finally{if(browser)await browser.close();await stopServer(server);dropSchema(schema);fs.rmSync(tmp,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exit(1)});

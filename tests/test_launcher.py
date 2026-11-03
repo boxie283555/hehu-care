@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, Mock
 ROOT = Path(__file__).resolve().parents[1]
+from tools.test_database import create, drop
 spec = importlib.util.spec_from_file_location('launcher', ROOT / 'launcher.py')
 launcher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(launcher)
@@ -34,7 +35,8 @@ class LauncherTests(unittest.TestCase):
     def test_server_survives_launcher_exit(self):
         with tempfile.TemporaryDirectory() as tmp:
             sock=socket.socket();sock.bind(('127.0.0.1',0));port=sock.getsockname()[1];sock.close()
-            env={**os.environ,'CARE_DB':str(Path(tmp)/'test.db')}
+            schema=create()
+            env={**os.environ,'HEHU_DB_SCHEMA':schema,'SEED_DEMO':'1'}
             # Redirect launcher runtime files away from the real application's PID.
             code='import launcher; from pathlib import Path; launcher.DATA=Path(%r); launcher.main()' % tmp
             result=subprocess.run([sys.executable,'-c',code,'--port',str(port),'--host','127.0.0.1','--no-browser'],cwd=ROOT,env=env,capture_output=True,text=True,timeout=25)
@@ -48,3 +50,5 @@ class LauncherTests(unittest.TestCase):
                 self.assertTrue(launcher.ready('http://127.0.0.1:'+str(port)))
             finally:
                 if pidfile.exists():os.kill(int(pidfile.read_text()),15)
+                import time;time.sleep(.2)
+                drop(schema)

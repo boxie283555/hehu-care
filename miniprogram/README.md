@@ -13,7 +13,7 @@
 
 ## 没有 AppID 怎么演示
 
-1. 在电脑上启动最新后台。Windows双击仓库根目录的 `start-windows.cmd`，会自动准备Python。
+1. 先按仓库根目录README配置PostgreSQL，再在电脑上启动最新后台。Windows双击仓库根目录的 `start-windows.cmd`，会自动准备Python。
 2. 安装并打开[微信开发者工具](https://developers.weixin.qq.com/miniprogram/dev/devtools/download.html)，用微信登录工具。
 3. 选择导入项目，目录选择仓库中的 **`miniprogram` 文件夹**，不是整个仓库，也不是 `web`。
 4. 使用测试号/无AppID的本地开发模式。工程中的 `touristappid` 是开发占位值，不是真实已注册AppID；工具版本若要求先申请测试号，按工具提供的测试号入口操作。
@@ -58,4 +58,4 @@ python -m unittest discover -s tests -v
 node tests/miniprogram.cjs
 ```
 
-测试使用真实HTTP后台和临时数据库，模拟wx网络/存储接口，验证页面控制逻辑及接口合同。它不能替代微信开发者工具编译、原生组件渲染或iPhone/Android真机验证。当前开发环境未安装微信开发者工具，尚未完成这些平台内验证。
+测试使用真实HTTP后台和隔离的PostgreSQL schema，模拟wx网络/存储接口，验证页面控制逻辑及接口合同。它不能替代微信开发者工具编译、原生组件渲染或iPhone/Android真机验证。当前开发环境未安装微信开发者工具，尚未完成这些平台内验证。

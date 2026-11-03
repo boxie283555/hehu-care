@@ -114,10 +114,8 @@ try {
     Write-Host "Python ready: $python"
     if ($InstallOnly) { exit 0 }
     Set-Location -LiteralPath $projectRoot
-    if (-not $env:HOST) { $env:HOST = '127.0.0.1' }
-    if (-not $env:PORT) { $env:PORT = '8765' }
-    Write-Host "Starting Hehu on $($env:HOST):$($env:PORT). Keep this window open."
-    & $python (Join-Path $projectRoot 'server.py')
+    Write-Host 'Preparing project dependencies and starting Hehu. Keep this window open.'
+    & $python (Join-Path $projectRoot 'bootstrap.py') --foreground
     exit $LASTEXITCODE
 } catch {
     Write-Host ('Startup failed: ' + $_.Exception.Message) -ForegroundColor Red

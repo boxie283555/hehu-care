@@ -1,3 +1,3 @@
 #!/bin/zsh
 cd "$(dirname "$0")"
-python3 launcher.py
+python3 bootstrap.py
