@@ -61,7 +61,6 @@ function Install-ManagedPython {
     $listing = Invoke-WebRequest -UseBasicParsing -Uri 'https://www.python.org/ftp/python/' -TimeoutSec 60
     $versions = [regex]::Matches($listing.Content, 'href="(3\.13\.\d+)/"') | ForEach-Object { [version]$_.Groups[1].Value } | Sort-Object -Descending -Unique
     if (-not $versions) { throw 'Could not discover a stable Python 3.13 release on python.org.' }
-    $version = $versions[0].ToString()
     $arch = $env:PROCESSOR_ARCHITEW6432
     if (-not $arch) { $arch = $env:PROCESSOR_ARCHITECTURE }
     switch ($arch.ToUpperInvariant()) {
@@ -70,7 +69,21 @@ function Install-ManagedPython {
         'X86' { $suffix = '.exe' }
         default { throw "Unsupported Windows architecture: $arch" }
     }
-    $url = "https://www.python.org/ftp/python/$version/python-$version$suffix"
+    # python.org can list a future release directory before its installers exist.
+    $url = $null
+    foreach ($candidateVersion in $versions) {
+        $version = $candidateVersion.ToString()
+        $candidateUrl = "https://www.python.org/ftp/python/$version/python-$version$suffix"
+        try {
+            Invoke-WebRequest -UseBasicParsing -Method Head -Uri $candidateUrl -TimeoutSec 30 | Out-Null
+            $url = $candidateUrl
+            break
+        } catch {
+            if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) { continue }
+            throw
+        }
+    }
+    if (-not $url) { throw 'No stable Python 3.13 installer is available for this architecture.' }
     $installer = Join-Path ([IO.Path]::GetTempPath()) ('hehu-python-' + [guid]::NewGuid().ToString('N') + '.exe')
     try {
         Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $installer -TimeoutSec 300
