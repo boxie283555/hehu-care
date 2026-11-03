@@ -114,11 +114,11 @@ try {
     Write-Host "Python ready: $python"
     if ($InstallOnly) { exit 0 }
     Set-Location -LiteralPath $projectRoot
-    Write-Host 'Preparing project dependencies and starting Hehu. Keep this window open.'
+    Write-Host 'Preparing dependencies, PostgreSQL and starting Hehu. Keep this window open.'
     & $python (Join-Path $projectRoot 'bootstrap.py') --foreground
     exit $LASTEXITCODE
 } catch {
     Write-Host ('Startup failed: ' + $_.Exception.Message) -ForegroundColor Red
-    Write-Host 'Check Internet access to python.org and your user-directory permissions, then run start-windows.cmd again.'
+    Write-Host 'Check Internet access to python.org / get.enterprisedb.com and your user-directory permissions, then run start-windows.cmd again.'
     exit 1
 }

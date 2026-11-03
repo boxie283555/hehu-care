@@ -6,8 +6,10 @@ $project = Split-Path $PSScriptRoot -Parent
 $runtime = Join-Path $env:TEMP 'hehu-bootstrap-test-python'
 $tokens = $null
 $parseErrors = $null
-[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $project 'bootstrap-windows.ps1'), [ref]$tokens, [ref]$parseErrors) | Out-Null
-if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
+foreach ($script in @('bootstrap-windows.ps1', 'tools/install-vcredist.ps1')) {
+    [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $project $script), [ref]$tokens, [ref]$parseErrors) | Out-Null
+    if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
+}
 & (Join-Path $project 'bootstrap-windows.ps1') -InstallOnly -ForceManagedInstall -RuntimeDirectory $runtime
 if ($LASTEXITCODE -ne 0) { throw 'Bootstrap failed' }
 & (Join-Path $project 'bootstrap-windows.ps1') -InstallOnly -ForceManagedInstall -RuntimeDirectory $runtime

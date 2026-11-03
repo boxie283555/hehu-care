@@ -20,7 +20,10 @@ def main():
         print('正在安装 PostgreSQL 驱动和项目依赖…',flush=True)
         subprocess.run([str(python),'-m','pip','install','-r',str(requirement)],check=True)
         marker.write_text(digest)
+    subprocess.run([str(python),str(ROOT/'tools/setup_postgres.py')],check=True,cwd=str(ROOT))
     args=sys.argv[1:]
+    if '--database-only' in args:
+        return 0
     if '--foreground' in args:
         args.remove('--foreground');target='server.py'
     else:target='launcher.py'

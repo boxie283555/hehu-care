@@ -2,7 +2,23 @@
 
 可在本机运行的首版业务原型。以电子问卷为入口，连接监护人、医护评估、管理计划与动态随访。
 
-## PostgreSQL 配置（首次启动必需）
+## Windows 自动部署 PostgreSQL（推荐）
+
+Windows x64 新安装直接双击 `start-windows.cmd`：自动准备 Python、项目依赖和 PostgreSQL，无需预先手动安装数据库。首次需联网，并预留约 2 GB 磁盘空间。
+
+- 没有配置 `DATABASE_URL` 时，从 EnterpriseDB 下载固定版本 PostgreSQL 17.10-1 二进制包（约 320 MB），校验内置 SHA-256 后解压；不是安装或覆盖系统现有 PostgreSQL 服务。
+- 缺少 Microsoft Visual C++ 运行库时，从微软下载并验证签名后自动安装；Windows 会弹出管理员授权，取消则停止安装，稍后可重试。
+- 自动创建项目专用数据目录 `data/postgres/cluster`，随机生成管理与应用密码，创建非超级用户 `hehu` 及同名数据库，将连接写入 `.env`。凭据文件限制为当前用户与 SYSTEM 访问，请勿上传或分享。
+- 数据库仅监听 `127.0.0.1`，首次从 55432–55451 选择可用端口，后续复用固定端口、数据库及密码，不重建已有数据。
+- 每次通过启动脚本启动应用时自动检查并启动该数据库。它不是 Windows 开机自启服务；关闭应用窗口不会自动关闭数据库，重启电脑后再次运行启动脚本即可。
+- 已有环境变量或 `.env` 的 `DATABASE_URL` 时，保留原配置，不自动安装其他数据库。若之前复制了含 `CHANGE_ME` 的示例配置，应先移除这一占位连接行；有效的云库或自建数据库连接请保留。
+- 首次默认 `SEED_DEMO=0`，不自动创建公开演示账号。需要演示数据时，**首次启动前**创建 `.env` 并只写入 `SEED_DEMO=1`。正式使用可按下节说明创建医护账号。
+
+只部署数据库和依赖、不启动网页服务：`python bootstrap.py --database-only`（需要已有 Python）。原 SQLite 业务数据仍应按迁移章节导入，不会自动覆盖到新数据库。
+
+本自动安装路径支持 Windows x64；macOS/Linux 及其他架构继续配置已有或云端 PostgreSQL。数据库目录和 `.env` 需长期保留；备份使用 `pg_dump` 或云数据库备份，不能将运行中的数据目录直接复制作为可靠备份。
+
+## 使用已有 / 云端 PostgreSQL
 
 本版仅使用 PostgreSQL，不会回退SQLite。可使用本机、Docker或云数据库，推荐PostgreSQL 17。
 
@@ -19,7 +35,7 @@ SEED_DEMO=1
 
 可选Docker方式：在 `.env` 中另设 `POSTGRES_PASSWORD`（与连接地址密码一致），执行 `docker compose up -d postgres`。容器数据保存在命名卷，端口只绑定127.0.0.1。不要执行 `docker compose down -v`，否则会删除数据库卷。
 
-启动脚本自动安装Python和驱动，但**不自动安装Windows PostgreSQL服务**；连接已有或云端数据库即可。
+Windows 未配置连接时会自动部署项目专用 PostgreSQL；已配置连接时直接复用，不修改已有服务。
 
 ## 原SQLite数据迁移
 
@@ -37,7 +53,7 @@ python tools/migrate_sqlite.py --source data/care.sqlite3 --apply
 
 ## 本机启动
 
-Windows 可双击 `start-windows.cmd`，自动检测并安装 Python；无需提前手动安装。macOS / Linux 命令行运行需要 Python 3.9 或以上。启动脚本会自动在项目虚拟环境中安装PostgreSQL驱动。启动前需要准备PostgreSQL数据库并配置 `.env`，详见下文。
+Windows 可双击 `start-windows.cmd`，自动检测并安装 Python；无需提前手动安装。macOS / Linux 命令行运行需要 Python 3.9 或以上。启动脚本会自动在项目虚拟环境中安装PostgreSQL驱动。Windows x64 可自动准备数据库；其他平台启动前需配置 PostgreSQL，详见上文。
 
 ```sh
 python3 bootstrap.py
@@ -55,7 +71,7 @@ python3 bootstrap.py --foreground
 
 ## Windows 启动（推荐）
 
-**双击 `start-windows.cmd`，无需预先安装 Python。** 启动脚本先寻找已有的 Python 3.9+（包括Python启动器、PATH和注册表）；找不到时从 Python 官网选择最新稳定的3.13补丁版本，校验有效的 Python Software Foundation 数字签名后，静默安装到当前用户的 `%LOCALAPPDATA%\Hehu\Python313`。默认不需要管理员权限，不修改系统PATH，不安装全局pip或数据库服务；项目虚拟环境使用pip安装依赖；后续启动复用现有环境，不重复下载。首次自动安装需要联网，并受Windows安装策略约束。
+**双击 `start-windows.cmd`，无需预先安装 Python。** 启动脚本先寻找已有的 Python 3.9+（包括Python启动器、PATH和注册表）；找不到时从 Python 官网选择最新稳定的3.13补丁版本，校验有效的 Python Software Foundation 数字签名后，静默安装到当前用户的 `%LOCALAPPDATA%\Hehu\Python313`。默认不需要管理员权限，不修改系统PATH，不安装全局pip；PostgreSQL 采用项目专用进程而非系统服务；项目虚拟环境使用pip安装依赖；后续启动复用现有环境，不重复下载。首次自动安装需要联网，并受Windows安装策略约束。
 
 脚本从项目目录启动服务，启动失败时保留报错窗口。服务运行期间不要关闭此窗口，在浏览器打开 http://127.0.0.1:8765 。该入口不依赖 VS Code 调试器。
 
