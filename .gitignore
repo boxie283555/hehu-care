@@ -11,3 +11,5 @@ output/
 *.log
 *.pid
 .venv/
+
+miniprogram/project.private.config.json

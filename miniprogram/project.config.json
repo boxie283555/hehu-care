@@ -1,0 +1,13 @@
+{
+  "description": "禾护家长端开发版",
+  "projectname": "hehu-care-mini",
+  "appid": "touristappid",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "./",
+  "setting": {"es6": true, "enhance": true, "minified": true, "urlCheck": false},
+  "condition": {"miniprogram": {"list": [
+    {"name": "首次综合评估扫码入口", "pathName": "pages/entry/index", "query": "questionnaire=initial", "scene": null},
+    {"name": "营养随访问卷扫码入口", "pathName": "pages/entry/index", "query": "scene=nutrition", "scene": null},
+    {"name": "过敏症状随访问卷", "pathName": "pages/entry/index", "query": "questionnaire=symptoms", "scene": null}
+  ]}}
+}

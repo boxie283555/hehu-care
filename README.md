@@ -161,3 +161,9 @@ npm run test:browser
 - `PUBLIC_BASE_URL`、`HOST` 和 `PORT` 环境变量会传递给服务；自动安装Python不等于配置公网域名、HTTPS或短信。
 - 自动安装仅针对Windows入口；macOS/Linux尚未包含系统级安装器。
 - 如需只准备环境、不启动服务：`powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap-windows.ps1 -InstallOnly`。
+
+## 微信小程序开发版
+
+新增原生家长端工程，位于 [`miniprogram/`](miniprogram/README.md)。尚无注册AppID时，可先导入微信开发者工具，以测试号/本地开发模式体验指定问卷、登录、建档、填报及健康空间。
+
+**该工程不会自动出现在网页后台或变成现有二维码的小程序入口。** 网页端二维码仍打开H5；正式小程序扫码需注册AppID及微信小程序码服务。完整导入和模拟扫码步骤见小程序目录说明。

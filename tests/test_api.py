@@ -3,9 +3,10 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 class Client:
     def __init__(self,base): self.base=base;self.opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-    def request(self,path,data=None,origin=None):
+    def request(self,path,data=None,origin=None,authorization=None):
         headers={'Content-Type':'application/json'}
         if origin:headers['Origin']=origin
+        if authorization is not None:headers['Authorization']=authorization
         req=urllib.request.Request(self.base+'/api'+path,data=json.dumps(data).encode() if data is not None else None,headers=headers)
         try:
             r=self.opener.open(req);raw=r.read();return r.status,json.loads(raw) if r.headers.get_content_type()=='application/json' else raw
@@ -79,4 +80,20 @@ class WorkflowTests(unittest.TestCase):
         payload['answers']={'feeding':'普通膳食','appetite':'一般','change':'无明显变化','adherence':'尚未制定方案','symptoms':['暂无明显不适','皮肤不适']}
         self.assertEqual(p.request('/children/1/questionnaires',payload)[0],400)
         self.assertEqual(p.request('/children/1/measurements',{'day':'2099-01-01','height':90,'weight':12})[0],400)
+    def test_miniprogram_bearer_session(self):
+        mini=Client(self.base);phone='13400134000'
+        code=mini.request('/auth/code',{'phone':phone})[1]['dev_code']
+        status,response=mini.request('/auth/login',{'phone':phone,'code':code,'client':'miniprogram','role':'guardian'})
+        self.assertEqual(status,200)
+        auth='Bearer '+response['access_token']
+        separate=Client(self.base)
+        self.assertEqual(separate.request('/me')[0],401)
+        self.assertEqual(separate.request('/me',authorization=auth)[1]['role'],'guardian')
+        self.assertEqual(separate.request('/children/1',authorization=auth)[0],403)
+        self.assertEqual(separate.request('/audit',authorization=auth)[0],403)
+        self.assertEqual(separate.request('/auth/login',{'role':'clinician','client':'miniprogram','username':'doctor','password':'Care2026!'})[0],403)
+        self.assertEqual(separate.request('/auth/logout',{},authorization=auth)[0],200)
+        self.assertEqual(separate.request('/me',authorization=auth)[0],401)
+        self.assertEqual(separate.request('/me',authorization='Bearer invalid')[0],401)
+
 if __name__=='__main__':unittest.main(verbosity=2)

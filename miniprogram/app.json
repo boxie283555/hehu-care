@@ -1,0 +1,6 @@
+{
+ "pages": ["pages/entry/index","pages/children/index","pages/child-new/index","pages/questionnaire/index","pages/result/index","pages/health/index"],
+ "window": {"navigationBarTitleText":"禾护 · 儿童健康","navigationBarBackgroundColor":"#f6f8f4","navigationBarTextStyle":"black","backgroundColor":"#f6f8f4"},
+ "style":"v2",
+ "sitemapLocation":"sitemap.json"
+}

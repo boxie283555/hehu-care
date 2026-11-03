@@ -1,0 +1,1 @@
+{"desc":"开发版健康管理页面不参与搜索索引","rules":[{"action":"disallow","page":"*"}]}

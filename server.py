@@ -91,12 +91,19 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff')
         if cookie:self.send_header('Set-Cookie',cookie + ('; Secure' if PUBLIC_BASE.startswith('https://') else ''))
         self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
+    def session_token(self):
+        authorization = self.headers.get('Authorization')
+        if authorization is not None:
+            match = re.fullmatch(r'Bearer ([A-Za-z0-9_-]{20,200})', authorization)
+            if not match: raise APIError('登录凭据格式不正确',401)
+            return match.group(1)
+        cookie = SimpleCookie()
+        try: cookie.load(self.headers.get('Cookie',''))
+        except Exception: raise APIError('请先登录',401)
+        token = cookie.get('care_session')
+        return token.value if token else ''
     def user(self,c):
-        cookie=SimpleCookie()
-        try:cookie.load(self.headers.get('Cookie',''))
-        except Exception:raise APIError('请先登录',401)
-        token=cookie.get('care_session')
-        u=c.execute('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>?',(token.value if token else '',time.time())).fetchone()
+        u=c.execute('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>?',(self.session_token(),time.time())).fetchone()
         if not u:raise APIError('登录已过期，请重新登录',401)
         return dict(u)
     def child(self,c,u,cid):
@@ -178,6 +185,7 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('INSERT INTO sms_limits VALUES(?,?)',(self.client_address[0],t))
                     return self.respond({'message':'本地开发模式：未发送真实短信','dev_code':code,'expires_in':300})
                 if path=='/api/auth/login':
+                    if data.get('client')=='miniprogram' and data.get('role')=='clinician':raise APIError('小程序仅提供监护人登录',403)
                     if data.get('role')=='clinician':
                         t=time.time();ip=self.client_address[0]
                         c.execute('DELETE FROM login_limits WHERE stamp<?',(t-900,))
@@ -196,10 +204,12 @@ class Handler(BaseHTTPRequestHandler):
                         c.execute('INSERT OR IGNORE INTO users(phone,name,role) VALUES(?,?,"guardian")',(phone,'家长'+phone[-4:]))
                         u=c.execute('SELECT * FROM users WHERE phone=?',(phone,)).fetchone()
                     token=secrets.token_urlsafe(32);c.execute('INSERT INTO sessions VALUES(?,?,?)',(token,u['id'],time.time()+43200))
-                    self.audit(c,u,'login');return self.respond({'ok':True},cookie='care_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200')
+                    self.audit(c,u,'login')
+                    if data.get('client')=='miniprogram':return self.respond({'ok':True,'access_token':token,'expires_in':43200})
+                    return self.respond({'ok':True},cookie='care_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200')
                 u=self.user(c)
                 if path=='/api/auth/logout':
-                    cookies=SimpleCookie(self.headers.get('Cookie',''));c.execute('DELETE FROM sessions WHERE token=?',(cookies['care_session'].value,))
+                    c.execute('DELETE FROM sessions WHERE token=?',(self.session_token(),))
                     return self.respond({'ok':True},cookie='care_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
                 if path=='/api/children':
                     if u['role']!='guardian':raise APIError('请由监护人创建患儿档案',403)
