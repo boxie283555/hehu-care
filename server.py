@@ -7,10 +7,12 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from pathlib import Path
 from urllib.parse import urlparse
+from network_config import sharing_config, public_base
 ROOT = Path(__file__).resolve().parent
 DB = Path(os.environ.get('CARE_DB', str(ROOT / 'data/care.sqlite3')))
 PORT = int(os.environ.get('PORT', '8765'))
 HOST = os.environ.get('HOST', '127.0.0.1')
+PUBLIC_BASE = public_base()
 
 def now(): return datetime.now().isoformat(timespec='seconds')
 @contextmanager
@@ -87,7 +89,7 @@ class Handler(BaseHTTPRequestHandler):
         raw=json.dumps(data,ensure_ascii=False).encode()
         self.send_response(status);self.send_header('Content-Type','application/json; charset=utf-8')
         self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff')
-        if cookie:self.send_header('Set-Cookie',cookie)
+        if cookie:self.send_header('Set-Cookie',cookie + ('; Secure' if PUBLIC_BASE.startswith('https://') else ''))
         self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
     def user(self,c):
         cookie=SimpleCookie()
@@ -107,7 +109,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path=urlparse(self.path).path
         if not path.startswith('/api/'):
-            files={'/':'index.html','/app.js':'app.js','/styles.css':'styles.css'}
+            files={'/':'index.html','/app.js':'app.js','/styles.css':'styles.css','/vendor/qrcode.js':'vendor/qrcode.js'}
             if path not in files:self.send_error(404);return
             f=ROOT/'web'/files[path]
             raw=f.read_bytes();self.send_response(200)
@@ -117,8 +119,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with connect() as c:
                 self.db=c
-                if path=='/api/config':return self.respond({'app':'hehu-care','mode':'development','sms':'development','today':date.today().isoformat()})
+                if path=='/api/config':return self.respond({'app':'hehu-care','mode':'development','sms':'development','today':date.today().isoformat(),'bind_host':HOST})
                 u=self.user(c)
+                if path=='/api/sharing':
+                    self.clinician(u);return self.respond(sharing_config(HOST,PORT))
                 if path=='/api/me':return self.respond({'id':u['id'],'name':u['name'],'role':u['role']})
                 if path=='/api/children':
                     query='SELECT c.*, (SELECT count(*) FROM tasks t WHERE t.child_id=c.id AND t.status="pending") pending, (SELECT count(*) FROM risks r WHERE r.child_id=c.id AND r.status="open") risks FROM children c'
@@ -151,7 +155,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             # Same-origin JSON requests only; cookies are HttpOnly + SameSite=Strict.
             origin=self.headers.get('Origin')
-            if origin and origin!='http://'+self.headers.get('Host',''):raise APIError('请求来源不允许',403)
+            if origin and origin not in {'http://'+self.headers.get('Host',''), PUBLIC_BASE}:raise APIError('请求来源不允许',403)
             if self.headers.get_content_type()!='application/json':raise APIError('请使用JSON请求',415)
             size=int(self.headers.get('Content-Length','0'))
             if size>65536:raise APIError('请求内容过大',413)
@@ -270,6 +274,9 @@ if __name__=='__main__':
     init_db()
     server = ThreadingHTTPServer((HOST,PORT),Handler)
     print('禾护本地演示服务：http://%s:%s（开发短信模式）'%(HOST,PORT),flush=True)
+    if HOST == '0.0.0.0':
+        for url in sharing_config(HOST,PORT)['lan_urls']:
+            print('同一 Wi-Fi 手机访问：'+url,flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

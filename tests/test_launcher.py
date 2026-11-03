@@ -42,5 +42,9 @@ class LauncherTests(unittest.TestCase):
             try:
                 self.assertEqual(result.returncode,0,result.stderr)
                 self.assertTrue(launcher.ready('http://127.0.0.1:'+str(port)))
+                mismatch=subprocess.run([sys.executable,'-c',code,'--port',str(port),'--lan','--no-browser'],cwd=ROOT,env=env,capture_output=True,text=True,timeout=10)
+                self.assertNotEqual(mismatch.returncode,0)
+                self.assertIn('已有服务仅监听本机',mismatch.stderr)
+                self.assertTrue(launcher.ready('http://127.0.0.1:'+str(port)))
             finally:
                 if pidfile.exists():os.kill(int(pidfile.read_text()),15)

@@ -1,0 +1,8 @@
+{
+  "name": "hehu-care",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Optional browser test dependencies; the application itself only needs Python.",
+  "scripts": {"test:browser": "node tests/browser.cjs && node tests/scan.cjs"},
+  "devDependencies": {"jsqr": "1.4.0", "pngjs": "7.0.0", "playwright": "1.61.1"}
+}

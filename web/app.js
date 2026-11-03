@@ -1,6 +1,12 @@
 const $=s=>document.querySelector(s);
 const state={user:null,children:[],selected:Number(sessionStorage.getItem('hehu-child'))||null,detail:null,page:sessionStorage.getItem('hehu-page')||'overview',metric:'height',kind:'首次综合评估',taskId:null,draftId:null};
-const icons={leaf:'⌁',overview:'▦',children:'♧',questionnaires:'▤',growth:'↗',plans:'▥',tasks:'◷',messages:'☷',audit:'⊞'};
+const questionnaireKinds={initial:'首次综合评估',nutrition:'生长与营养随访',symptoms:'过敏症状随访'};
+const scanParam=new URLSearchParams(location.search).get('questionnaire');
+if(scanParam!==null){if(Object.hasOwn(questionnaireKinds,scanParam))sessionStorage.setItem('hehu-scan',scanParam);else sessionStorage.removeItem('hehu-scan');}
+state.scan=sessionStorage.getItem('hehu-scan');
+if(!Object.hasOwn(questionnaireKinds,state.scan))state.scan=null;
+let sharedQR=null;
+const icons={leaf:'⌁',overview:'▦',children:'♧',questionnaires:'▤',growth:'↗',plans:'▥',tasks:'◷',messages:'☷',audit:'⊞',sharing:'▦'};
 const nav=[['overview','工作概览'],['children','患儿档案'],['questionnaires','电子问卷'],['growth','生长趋势'],['plans','评估与计划'],['tasks','随访管理'],['messages','医护沟通']];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=v=>v?esc(v.replace('T',' ').slice(0,16)):'—';
@@ -18,6 +24,7 @@ function select(label,name,options,value=''){return `<label class="field"><span>
 function modal(title,html){const d=$('#modal');d.innerHTML=`<div class="modal-head"><h2>${title}</h2><button type="button" class="icon-btn" data-action="close" aria-label="关闭">×</button></div>${html}`;d.showModal();}
 function loginPage(){
  $('#app').innerHTML=`<div class="login"><section class="login-story"><a class="brand" href="/"><span class="brandmark">禾</span><b>禾护<span>HEHU CARE</span></b></a><div class="story-copy"><span class="eyebrow">PEDIATRIC ALLERGY & NUTRITION</span><h1>让每一次记录，<br>成为成长的照护。</h1><p>连接家庭与医护，持续关注过敏儿童的<br>生长发育、营养与日常健康。</p><div class="story-chart"><div class="chart-caption">陪伴成长的每一步 <span>GROW WITH CARE</span></div><svg viewBox="0 0 480 160" aria-label="装饰性成长示意图"><path d="M15 125 Q100 135 160 92 T300 64 T460 15" fill="none" stroke="#387c67" stroke-width="4"/><path d="M15 125 Q100 135 160 92 T300 64 T460 15 L460 155 L15 155Z" fill="#43856b15"/>${[[15,125],[160,92],[300,64],[460,15]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="6" fill="#fff" stroke="#387c67" stroke-width="3"/>`).join('')}</svg><div class="mini-steps"><span>记录</span><span>评估</span><span>随访</span><span>成长</span></div></div></div><p class="story-footer">专注儿童健康 · 家庭与医护共同参与</p></section><section class="login-side"><div class="login-box"><div class="dev-tag">本机体验版 · 数据仅保存在本机</div><h2>欢迎来到禾护</h2><p class="muted">从一份健康档案，开始持续的照护</p><div class="tabs" id="login-tabs"><button class="active" data-action="login-guardian">家长 / 监护人</button><button data-action="login-clinician">医护工作台</button></div><div id="login-form"></div><div class="login-note">本机为开发短信模式，验证码会在页面展示，<br>不会发送真实短信。请使用演示资料体验。</div></div></section></div>`;
+ if(state.scan){$('.login-box h2').textContent='扫码填写 · '+questionnaireKinds[state.scan];$('.login-box .muted').textContent='验证手机号后，选择或建立孩子的档案';}
  loginForm(false);
 }
 function loginForm(isDoctor){
@@ -30,14 +37,14 @@ async function refresh(){
  sessionStorage.setItem('hehu-child',state.selected||'');
  state.detail=state.selected?await api('/children/'+state.selected):null;
 }
-async function enter(){state.user=await api('/me');await refresh();render();}
+async function enter(){state.user=await api('/me');await refresh();render();if(state.scan&&!clinician())scanChooser();}
 function render(){
- if(![...nav.map(n=>n[0]),...(clinician()?['audit']:[])].includes(state.page))state.page='overview';
+ if(![...nav.map(n=>n[0]),...(clinician()?['audit','sharing']:[])].includes(state.page))state.page='overview';
  sessionStorage.setItem('hehu-page',state.page);
  const ch=state.detail?.child;
- $('#app').innerHTML=`<div class="workspace"><aside class="sidebar"><a class="brand" href="/"><span class="brandmark">禾</span><b>禾护<span>HEHU CARE</span></b></a><div class="side-label">${clinician()?'医护协同工作台':'儿童健康管理'}</div><nav>${nav.concat(clinician()?[['audit','访问审计']]:[]).map(([id,name])=>`<button data-nav="${id}" class="nav-item ${state.page===id?'active':''}"><span>${icons[id]}</span>${name}${id==='tasks'&&state.children.reduce((a,c)=>a+c.pending,0)?'<i class="nav-dot"></i>':''}</button>`).join('')}</nav><div class="side-bottom"><div class="care-note"><span>✧</span><b>每个孩子，都有自己的成长节奏</b><p>以连续记录，支持个体化照护。</p></div><div class="account"><span class="avatar">${clinician()?'医':'家'}</span><div><b>${esc(state.user.name)}</b><small>${clinician()?'医护 · 本机演示权限':'监护人账户'}</small></div><button class="icon-btn" data-action="logout" title="退出登录" aria-label="退出登录">↪</button></div></div></aside><main class="main"><header class="topbar"><div class="breadcrumb">过敏儿童健康管理 <span>/</span> ${esc(nav.find(n=>n[0]===state.page)?.[1]||'访问审计')}</div><div class="top-right"><span class="local-dot"></span> 本机演示环境 <span class="top-date">${today().replaceAll('-',' / ')}</span></div></header><div class="content"><div class="page-head"><div><span class="eyebrow">${clinician()?'CARE TEAM WORKSPACE':'GROWING TOGETHER'}</span><h1>${{overview:clinician()?'照护，从看见变化开始':'一起关注孩子的每一步成长',children:'患儿健康档案',questionnaires:'把日常变化，记录下来',growth:'看见成长的轨迹',plans:'让照护更有方向',tasks:'让每次随访，都有回应',messages:'连接家庭与医护',audit:'访问与操作审计'}[state.page]}</h1><p>${{overview:'汇聚问卷、生长记录与随访进展，让持续照护更清晰。',children:'独立健康档案，连续记录孩子的生长与过敏情况。',questionnaires:'分场景填写电子问卷，为医护评估提供真实信息。',growth:'记录每一次测量，观察身高、体重的实际变化。',plans:'专业评估、个体化计划与随访安排，在这里连接。',tasks:'查看随访安排、完成情况和需要医护关注的事项。',messages:'记录问题与建议，让沟通与健康档案保持关联。',audit:'追踪健康档案的查看、导出与业务操作。'}[state.page]}</p></div>${!clinician()?button('＋ 新建患儿档案','new-child','primary'):pill('医护协作','green')}</div>${state.children.length&&state.page!=='audit'?`<div class="child-switch"><span class="avatar peach">${esc(ch.name[0])}</span><label><span>当前患儿</span><select id="child-select" aria-label="当前患儿">${state.children.map(c=>`<option value="${c.id}" ${c.id===state.selected?'selected':''}>${esc(c.name)} · ${age(c.birth)}</option>`).join('')}</select></label><span class="child-meta">${esc(ch.sex)} · ${esc(ch.birth)}出生</span><span class="spacer"></span>${pill('独立健康档案','gray')}</div>`:''}<div id="page"></div><footer class="page-footer">禾护 · 过敏儿童生长与营养管理 <span>辅助记录与随访，不替代临床诊疗</span></footer></div></main></div>`;
- const pages={overview:overview,children:childrenPage,questionnaires:questionnairePage,growth:growthPage,plans:plansPage,tasks:tasksPage,messages:messagesPage,audit:auditPage};
- if(!state.detail&&state.page!=='children'&&state.page!=='audit')$('#page').innerHTML=empty('先为孩子建立一份健康档案','点击右上角「新建患儿档案」，开始记录与随访。');else pages[state.page]();
+ $('#app').innerHTML=`<div class="workspace"><aside class="sidebar"><a class="brand" href="/"><span class="brandmark">禾</span><b>禾护<span>HEHU CARE</span></b></a><div class="side-label">${clinician()?'医护协同工作台':'儿童健康管理'}</div><nav>${nav.concat(clinician()?[['sharing','问卷二维码'],['audit','访问审计']]:[]).map(([id,name])=>`<button data-nav="${id}" class="nav-item ${state.page===id?'active':''}"><span>${icons[id]}</span>${name}${id==='tasks'&&state.children.reduce((a,c)=>a+c.pending,0)?'<i class="nav-dot"></i>':''}</button>`).join('')}</nav><div class="side-bottom"><div class="care-note"><span>✧</span><b>每个孩子，都有自己的成长节奏</b><p>以连续记录，支持个体化照护。</p></div><div class="account"><span class="avatar">${clinician()?'医':'家'}</span><div><b>${esc(state.user.name)}</b><small>${clinician()?'医护 · 本机演示权限':'监护人账户'}</small></div><button class="icon-btn" data-action="logout" title="退出登录" aria-label="退出登录">↪</button></div></div></aside><main class="main"><header class="topbar"><div class="breadcrumb">过敏儿童健康管理 <span>/</span> ${esc(nav.find(n=>n[0]===state.page)?.[1]||(state.page==='sharing'?'问卷二维码':'访问审计'))}</div><div class="top-right"><span class="local-dot"></span> 本机演示环境 <span class="top-date">${today().replaceAll('-',' / ')}</span></div></header><div class="content"><div class="page-head"><div><span class="eyebrow">${clinician()?'CARE TEAM WORKSPACE':'GROWING TOGETHER'}</span><h1>${{overview:clinician()?'照护，从看见变化开始':'一起关注孩子的每一步成长',children:'患儿健康档案',questionnaires:'把日常变化，记录下来',growth:'看见成长的轨迹',plans:'让照护更有方向',tasks:'让每次随访，都有回应',messages:'连接家庭与医护',audit:'访问与操作审计',sharing:'让家长扫码，开始填写'}[state.page]}</h1><p>${{overview:'汇聚问卷、生长记录与随访进展，让持续照护更清晰。',children:'独立健康档案，连续记录孩子的生长与过敏情况。',questionnaires:'分场景填写电子问卷，为医护评估提供真实信息。',growth:'记录每一次测量，观察身高、体重的实际变化。',plans:'专业评估、个体化计划与随访安排，在这里连接。',tasks:'查看随访安排、完成情况和需要医护关注的事项。',messages:'记录问题与建议，让沟通与健康档案保持关联。',audit:'追踪健康档案的查看、导出与业务操作。',sharing:'指定问卷、一张二维码，连接诊室与家庭。'}[state.page]}</p></div>${!clinician()?button('＋ 新建患儿档案','new-child','primary'):pill('医护协作','green')}</div>${state.children.length&&!['audit','sharing'].includes(state.page)?`<div class="child-switch"><span class="avatar peach">${esc(ch.name[0])}</span><label><span>当前患儿</span><select id="child-select" aria-label="当前患儿">${state.children.map(c=>`<option value="${c.id}" ${c.id===state.selected?'selected':''}>${esc(c.name)} · ${age(c.birth)}</option>`).join('')}</select></label><span class="child-meta">${esc(ch.sex)} · ${esc(ch.birth)}出生</span><span class="spacer"></span>${pill('独立健康档案','gray')}</div>`:''}${state.scan&&!clinician()?`<div class="scan-banner"><div><b>扫码问卷：${esc(questionnaireKinds[state.scan])}</b><p>登录 → 选择患儿 → 填写问卷 → 提交</p></div>${button('继续填写','scan-choose','secondary')}</div>`:''}<div id="page"></div><footer class="page-footer">禾护 · 过敏儿童生长与营养管理 <span>辅助记录与随访，不替代临床诊疗</span></footer></div></main></div>`;
+ const pages={overview:overview,children:childrenPage,questionnaires:questionnairePage,growth:growthPage,plans:plansPage,tasks:tasksPage,messages:messagesPage,audit:auditPage,sharing:sharingPage};
+ if(!state.detail&&!['children','audit','sharing'].includes(state.page))$('#page').innerHTML=empty('先为孩子建立一份健康档案','点击右上角「新建患儿档案」，开始记录与随访。');else pages[state.page]();
 }
 function overview(){
  const d=state.detail,m=[...d.measurements].sort((a,b)=>a.day.localeCompare(b.day)),latest=m.at(-1);
@@ -62,7 +69,7 @@ function chart(items,metric,compact=false){
 function growthPage(){const d=state.detail;$('#page').innerHTML=`<section class="card"><div class="card-head"><div><h2>生长趋势</h2><p>按实际测量日期展示，不自动作出营养状态诊断</p></div>${button('＋ 添加测量','new-measurement')}</div><div class="tabs small"><button class="${state.metric==='height'?'active':''}" data-action="metric-height">身高 / 身长</button><button class="${state.metric==='weight'?'active':''}" data-action="metric-weight">体重</button></div>${chart(d.measurements,state.metric)}</section><section class="card roster"><div class="card-head"><h2>测量记录</h2>${clinician()?`<a class="btn secondary" href="/api/children/${state.selected}/export">导出 CSV</a>`:''}</div><div class="table-wrap"><table><thead><tr><th>测量日期</th><th>身高 / 身长</th><th>体重</th><th>数据来源</th></tr></thead><tbody>${[...d.measurements].sort((a,b)=>b.day.localeCompare(a.day)).map(m=>`<tr><td>${m.day}</td><td>${m.height} cm</td><td>${m.weight} kg</td><td>${esc(m.source)}</td></tr>`).join('')}</tbody></table></div>${!d.measurements.length?empty('暂无测量记录'):''}</section>`;}
 function questionnairePage(){
  const qs=state.detail.questionnaires;
- $('#page').innerHTML=`${!clinician()?`<div class="question-types">${[['首次综合评估','建立完整的健康与喂养背景','01'],['生长与营养随访','关注饮食、喂养与计划执行','02'],['过敏症状随访','记录症状与近期变化','03']].map(([n,s,num])=>`<button class="question-type" data-action="new-questionnaire" data-kind="${n}"><span>${num}</span><h3>${n}</h3><p>${s}</p><b>开始填写 ↗</b></button>`).join('')}</div>`:''}<section class="card"><div class="card-head"><div><h2>历次问卷</h2><p>当前问卷版本 v1.0 · 记录型问卷，尚未配置临床评分</p></div>${pill(qs.filter(q=>q.status==='submitted').length+' 份已提交','gray')}</div>${qs.length?`<div class="record-list">${qs.map(q=>`<article><span class="record-icon">▤</span><div class="grow"><h3>${esc(q.kind)} ${pill(q.status==='draft'?'草稿':'已提交',q.status==='draft'?'orange':'green')}</h3><p>${fmt(q.created)} · v${esc(q.version)}</p></div>${button(q.status==='draft'?'继续填写':'查看记录',q.status==='draft'?'edit-draft':'view-questionnaire','secondary',`data-id="${q.id}"`)}</article>`).join('')}</div>`:empty('还没有问卷记录',clinician()?'监护人提交问卷后，会在这里展示。':'选择上方问卷，开始首次填报。')}</section>`;
+ $('#page').innerHTML=`${clinician()?`<div class="scan-banner"><div><b>家长扫码填问卷</b><p>生成指定问卷的二维码，供诊室展示或发送给家长。</p></div><button class="btn primary" data-nav="sharing">生成问卷二维码</button></div>`:''}${!clinician()?`<div class="question-types">${[['首次综合评估','建立完整的健康与喂养背景','01'],['生长与营养随访','关注饮食、喂养与计划执行','02'],['过敏症状随访','记录症状与近期变化','03']].map(([n,s,num])=>`<button class="question-type" data-action="new-questionnaire" data-kind="${n}"><span>${num}</span><h3>${n}</h3><p>${s}</p><b>开始填写 ↗</b></button>`).join('')}</div>`:''}<section class="card"><div class="card-head"><div><h2>历次问卷</h2><p>当前问卷版本 v1.0 · 记录型问卷，尚未配置临床评分</p></div>${pill(qs.filter(q=>q.status==='submitted').length+' 份已提交','gray')}</div>${qs.length?`<div class="record-list">${qs.map(q=>`<article><span class="record-icon">▤</span><div class="grow"><h3>${esc(q.kind)} ${pill(q.status==='draft'?'草稿':'已提交',q.status==='draft'?'orange':'green')}</h3><p>${fmt(q.created)} · v${esc(q.version)}</p></div>${button(q.status==='draft'?'继续填写':'查看记录',q.status==='draft'?'edit-draft':'view-questionnaire','secondary',`data-id="${q.id}"`)}</article>`).join('')}</div>`:empty('还没有问卷记录',clinician()?'监护人提交问卷后，会在这里展示。':'选择上方问卷，开始首次填报。')}</section>`;
 }
 function questionnaireModal(kind,existing=null){
  state.kind=kind;state.draftId=existing?.id??null;const a=existing?.answers||{},c=state.detail.child;
@@ -75,8 +82,13 @@ function messagesPage(){const msgs=state.detail.messages;$('#page').innerHTML=`<
 async function auditPage(){const target=$('#page');target.innerHTML='<div class="card">正在加载审计记录…</div>';try{const data=await api('/audit');if(state.page!=='audit')return;const labels={view:'查看患儿档案',export:'导出生长记录',login:'登录',create_child_and_guardian_consent:'建档及监护授权确认',create_or_update_measurements:'新增测量',create_or_update_questionnaires:'保存或提交问卷',create_or_update_assessments:'新增评估',create_or_update_plans:'制定管理计划',create_or_update_messages:'发送留言',create_or_update_tasks:'完成随访',create_or_update_risks:'处理关注事项'};target.innerHTML=`<section class="card"><div class="card-head"><h2>最近150条操作记录</h2>${pill('只读','gray')}</div><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>患儿编号</th></tr></thead><tbody>${data.map(a=>`<tr><td>${fmt(a.created)}</td><td>${esc(a.name)}</td><td>${esc(labels[a.action]||a.action)}</td><td>${a.child_id?'#'+a.child_id:'—'}</td></tr>`).join('')}</tbody></table></div></section>`;}catch(e){toast(e.message);}}
 async function saved(message='已保存'){ $('#modal').close();await refresh();render();toast(message); }
 function formData(form){return Object.fromEntries(new FormData(form).entries());}
-async function saveQuestion(status){const f=$('#questionnaire-form'),a=formData(f);a.symptoms=[...f.querySelectorAll('input[name=symptoms]:checked')].map(e=>e.value);await api(`/children/${state.selected}/questionnaires`,{kind:state.kind,status,answers:a,id:state.draftId,task_id:status==='submitted'?state.taskId:null});state.taskId=null;state.draftId=null;await saved(status==='draft'?'草稿已保存':'问卷已提交');}
+async function saveQuestion(status){const f=$('#questionnaire-form'),a=formData(f);a.symptoms=[...f.querySelectorAll('input[name=symptoms]:checked')].map(e=>e.value);await api(`/children/${state.selected}/questionnaires`,{kind:state.kind,status,answers:a,id:state.draftId,task_id:status==='submitted'?state.taskId:null});state.taskId=null;state.draftId=null;const scanCompleted=status==='submitted'&&questionnaireKinds[state.scan]===state.kind;if(scanCompleted){state.scan=null;sessionStorage.removeItem('hehu-scan');const u=new URL(location.href);u.searchParams.delete('questionnaire');history.replaceState(null,'',u);state.page='questionnaires';}await saved(status==='draft'?'草稿已保存':'问卷已提交');if(scanCompleted)modal('问卷提交成功',`<div class="empty"><span>✓</span><h3>${esc(state.detail.child.name)}的问卷已提交</h3><p>医护可在后台查看。无需重复填写，请按计划继续随访。</p></div><div class="modal-actions">${button('查看问卷记录','close')}</div>`);}
 async function handleAction(el){const action=el.dataset.action,id=Number(el.dataset.id);switch(action){
+case 'scan-choose':scanChooser();break;
+case 'scan-child':state.selected=id;await refresh();render();openScanForm();break;
+case 'generate-qr':generateQR();break;
+case 'download-qr':if(sharedQR){const a=document.createElement('a');a.href=sharedQR.image;a.download='禾护-'+sharedQR.title+'-二维码.png';a.click();}break;
+case 'print-qr':if(sharedQR){let target=$('#qr-print');if(!target){target=document.createElement('section');target.id='qr-print';document.body.appendChild(target);}target.innerHTML=`<h1>禾护 · 儿童健康管理</h1><h2>${esc(sharedQR.title)}</h2><img src="${sharedQR.image}" alt="问卷二维码"><p>扫码 → 手机验证 → 选择或建立患儿档案 → 填写并提交</p><p class="print-url">${esc(sharedQR.url)}</p><p>${sharedQR.local?'手机与医院电脑需连接同一 Wi-Fi。':'请使用手机扫码打开问卷。'}</p><small>演示环境：验证码在页面展示，尚未接入真实短信。</small>`;window.print();}break;
 case 'login-guardian':loginForm(false);break;
 case 'login-clinician':loginForm(true);break;
 case 'send-code':{const phone=$('[name=phone]').value;el.disabled=true;try{const r=await api('/auth/code',{phone});$('#dev-code').innerHTML=`<div class="notice">开发验证码：<b>${esc(r.dev_code)}</b> · 5分钟有效<br><small>未发送短信，仅用于本机体验</small></div>`;$('[name=code]').value=r.dev_code;}finally{el.disabled=false;}break;}
@@ -102,7 +114,7 @@ document.addEventListener('change',async e=>{if(e.target.id==='child-select'){st
 document.addEventListener('submit',async e=>{e.preventDefault();const f=e.target,b=f.querySelector('[type=submit]');if(b)b.disabled=true;try{let data=formData(f);switch(f.id){
 case 'login-parent':await api('/auth/login',{...data,role:'guardian'});await enter();break;
 case 'login-doctor':await api('/auth/login',{...data,role:'clinician'});await enter();break;
-case 'child-form':{data.consent=f.elements.consent.checked;const r=await api('/children',data);state.selected=r.id;state.page='children';await saved('健康档案已建立');break;}
+case 'child-form':{data.consent=f.elements.consent.checked;const r=await api('/children',data);state.selected=r.id;state.page='children';await saved('健康档案已建立');if(state.scan)openScanForm();break;}
 case 'measurement-form':await api(`/children/${state.selected}/measurements`,data);await saved('测量记录已保存');break;
 case 'questionnaire-form':await saveQuestion('submitted');break;
 case 'assessment-form':await api(`/children/${state.selected}/assessments`,data);await saved('医护评估已记录');break;
@@ -111,4 +123,44 @@ case 'message-form':await api(`/children/${state.selected}/messages`,data);await
 case 'task-form':await api(`/children/${state.selected}/tasks`,{...data,id:Number(f.dataset.id)});await saved('随访任务已完成');break;
 case 'risk-form':await api(`/children/${state.selected}/risks`,{...data,id:Number(f.dataset.id)});await saved('关注事项已处理');break;
 }}catch(err){toast(err.message);}finally{if(b)b.disabled=false;}});
+
+function scanChooser(){
+ if(!state.scan||clinician())return;
+ modal('为哪位孩子填写？',`<p class="modal-sub">指定问卷：${esc(questionnaireKinds[state.scan])}</p><div class="scan-steps">① 手机验证完成　② 选择 / 建立档案　③ 填写并提交</div><div class="scan-children">${state.children.map(c=>`<button class="scan-child" data-action="scan-child" data-id="${c.id}"><span class="avatar peach">${esc(c.name[0])}</span><div><b>${esc(c.name)}</b><small>${age(c.birth)} · ${esc(c.sex)}</small></div><span>填写 →</span></button>`).join('')||'<p class="muted">您还没有关联患儿，请先建立健康档案。</p>'}</div><div class="modal-actions">${button('＋ 建立新患儿档案','new-child')}</div>`);
+}
+function openScanForm(){
+ if(!state.scan||clinician())return;
+ state.taskId=null;
+ const draft=state.detail.questionnaires.find(q=>q.status==='draft'&&q.kind===questionnaireKinds[state.scan]);
+ questionnaireModal(questionnaireKinds[state.scan],draft||null);
+}
+async function sharingPage(){
+ sharedQR=null;$('#page').innerHTML='<div class="card">正在读取网络配置…</div>';
+ try{
+ const config=await api('/sharing');if(state.page!=='sharing')return;
+ state.sharing=config;
+ const suggested=config.public_base||(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'?location.origin:config.lan_urls[0]||'');
+ $('#page').innerHTML=`<div class="two-col"><section class="card"><div class="card-head"><div><h2>生成问卷二维码</h2><p>二维码仅包含问卷入口，不包含患儿身份信息。</p></div></div><label class="field"><span>指定问卷</span><select id="qr-kind">${Object.entries(questionnaireKinds).map(([id,title])=>`<option value="${id}">${title}</option>`).join('')}</select></label>${field('手机可访问的系统地址','qr-base','url',suggested,'id="qr-base" placeholder="http://192.168.1.100:8765"')}<p class="hint">同一 Wi-Fi 使用电脑的局域网 IP；正式使用可配置 HTTPS 域名。不要填写 127.0.0.1 或 0.0.0.0。</p>${config.lan_urls.length?`<p class="hint">检测到的候选地址：${config.lan_urls.map(u=>esc(u)).join('、')}。多网卡时请选择手机能访问的地址。</p>`:''}${!config.lan_enabled&&!config.public_base?'<div class="notice">当前服务仅监听本机。请先停止旧服务，使用 start-lan-windows.cmd（Windows）或 python3 launcher.py --lan 启动，再生成局域网二维码。</div>':'<div class="notice">请先用手机浏览器验证系统地址可打开，再下载或打印。二维码本身不会改变网络或防火墙设置。</div>'}<div class="modal-actions">${button('生成二维码','generate-qr')}</div></section><section class="card" id="qr-preview">${empty('等待生成问卷二维码','选择问卷和手机可访问的地址后，即可下载或打印。')}</section></div>`;
+ }catch(e){toast(e.message);}
+}
+function generateQR(){
+ sharedQR=null;$('#qr-preview').innerHTML=empty('正在生成');
+ try{
+ const kind=$('#qr-kind').value,raw=$('#qr-base').value.trim(),u=new URL(raw);
+ if(!Object.hasOwn(questionnaireKinds,kind))throw Error('请选择有效问卷');
+ if(!['http:','https:'].includes(u.protocol)||u.username||u.password||u.search||u.hash||u.pathname!=='/')throw Error('请输入不含路径或参数的完整系统地址');
+ if(['localhost','0.0.0.0','[::1]','[::]'].includes(u.hostname)||u.hostname.startsWith('127.'))throw Error('手机不能使用本机回环地址，请填写局域网 IP 或正式域名');
+ if(!state.sharing.lan_enabled&&u.protocol==='http:'&&!state.sharing.public_base)throw Error('当前仅监听本机，请先使用局域网模式重新启动服务');
+ u.searchParams.set('questionnaire',kind);
+ const url=u.href;
+ if(url.length>1500)throw Error('系统地址过长');
+ const qr=qrcode(0,'M');qr.addData(url);qr.make();
+ const count=qr.getModuleCount(),scale=10,border=4,canvas=document.createElement('canvas');canvas.width=canvas.height=(count+border*2)*scale;
+ const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#102b22';
+ for(let row=0;row<count;row++)for(let col=0;col<count;col++)if(qr.isDark(row,col))ctx.fillRect((col+border)*scale,(row+border)*scale,scale,scale);
+ sharedQR={url,title:questionnaireKinds[kind],image:canvas.toDataURL('image/png'),local:u.protocol==='http:'};
+ $('#qr-preview').innerHTML=`<div class="qr-result"><span class="eyebrow">SCAN TO START</span><h2>${esc(sharedQR.title)}</h2><img id="questionnaire-qr" src="${sharedQR.image}" alt="${esc(sharedQR.title)}二维码"><p>手机验证 → 选择孩子 → 填写并提交</p><a id="qr-link" href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a><div class="qr-buttons">${button('下载 PNG','download-qr','secondary')}${button('打印二维码','print-qr')}</div></div>`;
+ }catch(e){$('#qr-preview').innerHTML=empty('暂未生成二维码',esc(e.message));throw e;}
+}
+document.addEventListener('input',e=>{if(['qr-base','qr-kind'].includes(e.target.id)){sharedQR=null;$('#qr-preview').innerHTML=empty('配置已变更，请重新生成');}});
 (async()=>{try{await enter();}catch{loginPage();}})();

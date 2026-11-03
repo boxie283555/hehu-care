@@ -9,6 +9,7 @@ import sys
 import time
 import urllib.request
 import webbrowser
+from network_config import sharing_config
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / 'data'
@@ -64,9 +65,12 @@ def start_service(host, port):
 def main():
     parser = argparse.ArgumentParser(description='启动禾护本地服务')
     parser.add_argument('--no-browser', action='store_true')
+    parser.add_argument('--lan', action='store_true', help='允许同一局域网访问')
     parser.add_argument('--host', default=os.environ.get('HOST', '127.0.0.1'))
     parser.add_argument('--port', type=int, default=int(os.environ.get('PORT', '8765')))
     args = parser.parse_args()
+    if args.lan:
+        args.host = '0.0.0.0'
     if not 1 <= args.port <= 65535:
         parser.error('端口必须在1到65535之间')
     visit_host = '127.0.0.1' if args.host == '0.0.0.0' else args.host
@@ -84,9 +88,17 @@ def main():
         else:
             child.terminate()
             raise RuntimeError('启动超时，请查看 %s。' % (DATA / 'server.log'))
+    if args.host == '0.0.0.0':
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(url + '/api/config', timeout=2) as response:
+            active = json.load(response)
+        if active.get('bind_host') != '0.0.0.0':
+            raise RuntimeError('已有服务仅监听本机。请先停止旧服务，再以 --lan 或 start-lan-windows.cmd 启动。')
     print('禾护已运行：' + url)
     if args.host == '0.0.0.0':
-        print('局域网访问请使用本机实际IP，端口：' + str(args.port))
+        print('手机与电脑需在同一 Wi-Fi 下；候选访问地址：')
+        for candidate in sharing_config(args.host,args.port)['lan_urls']:
+            print(candidate)
     if not args.no_browser:
         webbrowser.open(url)
 
