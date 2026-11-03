@@ -26,7 +26,7 @@ def pool():
         with _lock:
             if _pool is None:
                 dsn=os.environ.get('DATABASE_URL')
-                if not dsn:raise RuntimeError('请在 .env 中设置 PostgreSQL DATABASE_URL；不会自动回退到SQLite。')
+                if not dsn:raise RuntimeError('请先通过启动脚本部署 PostgreSQL，或在 .env 中设置 DATABASE_URL。')
                 maximum=int(os.environ.get('DB_POOL_MAX','10'))
                 if not 1<=maximum<=100:raise RuntimeError('DB_POOL_MAX 必须在1到100之间')
                 candidate=ConnectionPool(dsn,min_size=1,max_size=maximum,timeout=10,max_waiting=100,

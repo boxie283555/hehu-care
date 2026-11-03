@@ -16,7 +16,7 @@ function Test-Python {
     # Do not invoke Microsoft Store execution aliases.
     if ($Executable -like '*\Microsoft\WindowsApps\*') { return $null }
     try {
-        $result = & $Executable @PrefixArgs -c 'import sys,sqlite3; assert sys.version_info >= (3,9); print("HEHU_PYTHON="+sys.executable)' 2>$null
+        $result = & $Executable @PrefixArgs -c 'import sys; assert sys.version_info >= (3,9); print("HEHU_PYTHON="+sys.executable)' 2>$null
         if ($LASTEXITCODE -ne 0) { return $null }
         foreach ($line in @($result)) {
             if ("$line".StartsWith('HEHU_PYTHON=')) { return "$line".Substring(12) }
@@ -29,7 +29,7 @@ function Find-Python {
     if ($env:PYTHON_EXE) {
         $found = Test-Python $env:PYTHON_EXE
         if ($found) { return $found }
-        throw 'PYTHON_EXE is set but does not point to Python 3.9+ with sqlite3. Correct or clear it and retry.'
+        throw 'PYTHON_EXE is set but does not point to Python 3.9+. Correct or clear it and retry.'
     }
     $found = Test-Python (Join-Path $RuntimeDirectory 'python.exe')
     if ($found) { return $found }

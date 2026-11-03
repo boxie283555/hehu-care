@@ -14,13 +14,13 @@ Windows x64 新安装直接双击 `start-windows.cmd`：自动准备 Python、�
 - 已有环境变量或 `.env` 的 `DATABASE_URL` 时，保留原配置，不自动安装其他数据库。若之前复制了含 `CHANGE_ME` 的示例配置，应先移除这一占位连接行；有效的云库或自建数据库连接请保留。
 - 首次默认 `SEED_DEMO=0`，不自动创建公开演示账号。需要演示数据时，**首次启动前**创建 `.env` 并只写入 `SEED_DEMO=1`。正式使用可按下节说明创建医护账号。
 
-只部署数据库和依赖、不启动网页服务：`python bootstrap.py --database-only`（需要已有 Python）。原 SQLite 业务数据仍应按迁移章节导入，不会自动覆盖到新数据库。
+只部署数据库和依赖、不启动网页服务：`python bootstrap.py --database-only`（需要已有 Python）。部署时直接创建或连接 PostgreSQL 数据库。
 
 本自动安装路径支持 Windows x64；macOS/Linux 及其他架构继续配置已有或云端 PostgreSQL。数据库目录和 `.env` 需长期保留；备份使用 `pg_dump` 或云数据库备份，不能将运行中的数据目录直接复制作为可靠备份。
 
 ## 使用已有 / 云端 PostgreSQL
 
-本版仅使用 PostgreSQL，不会回退SQLite。可使用本机、Docker或云数据库，推荐PostgreSQL 17。
+系统统一使用 PostgreSQL。可使用本机、Docker或云数据库，推荐PostgreSQL 17。
 
 1. 创建数据库和数据库账号（账号需有目标schema建表权限）。
 2. 复制 `.env.example` 为 `.env`，填写连接地址：
@@ -36,20 +36,6 @@ SEED_DEMO=1
 可选Docker方式：在 `.env` 中另设 `POSTGRES_PASSWORD`（与连接地址密码一致），执行 `docker compose up -d postgres`。容器数据保存在命名卷，端口只绑定127.0.0.1。不要执行 `docker compose down -v`，否则会删除数据库卷。
 
 Windows 未配置连接时会自动部署项目专用 PostgreSQL；已配置连接时直接复用，不修改已有服务。
-
-## 原SQLite数据迁移
-
-先停止旧服务，保留原来的 `data` 目录。配置一个空的PostgreSQL数据库，设置 `SEED_DEMO=0`，避免提前写入演示数据。安装依赖后运行：
-
-```sh
-python -m pip install -r requirements.txt
-python tools/migrate_sqlite.py --source data/care.sqlite3
-python tools/migrate_sqlite.py --source data/care.sqlite3 --apply
-```
-
-第一条迁移命令只检查源数据；加 `--apply` 才导入。工具先创建一致性SQLite备份（包含WAL中的数据），再在单一PostgreSQL事务中导入业务表，保留ID与关联关系，核对行数并重置自增序列。目标库已有业务数据时拒绝导入。原SQLite文件不删除、不改写。
-
-旧会话、验证码与限流记录不迁移，需要重新登录。验证迁移完成后启动新服务。不要在旧SQLite服务仍接受写入时迁移，以免漏掉之后的修改。
 
 ## 本机启动
 
@@ -162,7 +148,7 @@ $env:HOST = "0.0.0.0"
 - 业务实体：用户、会话、监护归属、患儿、测量、问卷、评估、计划、随访任务、关注事项、留言、审计。
 - 本版以快速本地运行和验证流程为目标，采用轻量实现；正式建设时可迁移至方案中的 Vue / Spring Boot / PostgreSQL。
 
-数据库连接保存在被Git忽略的 `.env` 中。旧 `data/care.sqlite3` 仅作为迁移源保留，不再用于服务读写。PostgreSQL应使用 `pg_dump` / 云数据库备份，密码不要提交Git。
+数据库连接保存在被Git忽略的 `.env` 中。PostgreSQL应使用 `pg_dump` / 云数据库备份，密码不要提交Git。
 
 ## 尚待医院确认与后续实现
 
